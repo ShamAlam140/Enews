@@ -36,10 +36,10 @@
     };
   }
   if (typeof global.FormData === 'undefined') {
-    global.FormData = class FormData {};
+    global.FormData = class FormData { };
   }
   if (typeof global.ReadableStream === 'undefined') {
-    global.ReadableStream = class ReadableStream {};
+    global.ReadableStream = class ReadableStream { };
   }
 })();
 
@@ -67,7 +67,7 @@ app.disable('x-powered-by');
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
-  : ['http://localhost:5173'];
+  : ['https://enews-nine.vercel.app'];
 
 app.use(
   cors({
