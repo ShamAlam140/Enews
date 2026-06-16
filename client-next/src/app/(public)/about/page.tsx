@@ -2,7 +2,7 @@ export default function About() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-12">
       <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">About SusaNews</h1>
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">About Khabre Aaj Tak</h1>
         <div className="w-20 h-1 bg-red-600 mx-auto"></div>
       </div>
 
@@ -19,7 +19,7 @@ export default function About() {
           <div>
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Our Mission</h2>
             <p className="text-gray-700 leading-relaxed">
-              SusaNews is committed to delivering accurate, timely, and comprehensive 
+              Khabre Aaj Tak is committed to delivering accurate, timely, and comprehensive 
               news coverage from around the globe. Our team of experienced journalists and 
               editors work around the clock to bring you the stories that matter most.
             </p>

@@ -12,7 +12,7 @@ type Props = {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const prettyCity = titleCaseCity(params.city);
   return {
-    title: `${prettyCity} News - SusaNews | ताज़ा खबरें`,
+    title: `${prettyCity} News - Khabre Aaj Tak | ताज़ा खबरें`,
     description: `Read all the latest e-papers and news documents from ${prettyCity}. Stay updated with daily local news.`,
   };
 }

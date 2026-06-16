@@ -11,7 +11,7 @@ export default function Privacy() {
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Our Commitment to Privacy</h2>
             <p className="text-gray-700 leading-relaxed mb-4">
-              At SusaNews, we take your privacy seriously. This policy outlines how we collect, 
+              At Khabre Aaj Tak, we take your privacy seriously. This policy outlines how we collect, 
               use, and protect your personal information when you use our news platform.
             </p>
           </div>
@@ -48,7 +48,7 @@ export default function Privacy() {
               <p className="text-blue-800">
                 If you have any questions about our privacy practices, please contact us at:
                 <br />
-                <strong>privacy@SusaNews.com</strong>
+                <strong>privacy@khabreaajtak.co.in</strong>
               </p>
             </div>
           </div>
