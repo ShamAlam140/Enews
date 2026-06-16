@@ -70,7 +70,7 @@ app.disable('x-powered-by');
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
-  : ['https://enews-nine.vercel.app'];
+  : ['https://khabreaajtak.co.in'];
 
 app.use(
   cors({
