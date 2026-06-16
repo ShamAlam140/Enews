@@ -2,8 +2,12 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import Zoom from "react-medium-image-zoom";
+import dynamic from "next/dynamic";
 import "react-medium-image-zoom/dist/styles.css";
+
+const Zoom = dynamic(() => import("react-medium-image-zoom"), {
+  ssr: false,
+});
 
 import type { CityLatest } from "@/lib/types/files";
 import { titleCaseCity, formatShortDate } from "@/lib/utils/format";

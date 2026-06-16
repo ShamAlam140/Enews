@@ -2,21 +2,18 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import Zoom from "react-medium-image-zoom";
+import dynamic from "next/dynamic";
 import "react-medium-image-zoom/dist/styles.css";
 
 import type { CityItem } from "@/lib/types/city";
 import { pretty } from "@/lib/utils/format";
 import { getCityFiles } from "@/lib/services/publicCityService";
 
-const PAGE_SIZE = 10;
+const Zoom = dynamic(() => import("react-medium-image-zoom"), {
+  ssr: false,
+});
 
-type LightboxState = {
-  fileId: string | null;
-  src: string | null;
-  page: number | null;
-  name: string | null;
-};
+const PAGE_SIZE = 10;
 
 export default function CityClient({ city, initialFiles }: { city: string; initialFiles: CityItem[] }) {
   const title = useMemo(() => pretty(city), [city]);
@@ -32,13 +29,6 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
       initialMap[f.id] = 1;
     });
     return initialMap;
-  });
-
-  const [lightbox, setLightbox] = useState<LightboxState>({
-    fileId: null,
-    src: null,
-    page: null,
-    name: null,
   });
 
   const reload = async () => {
@@ -61,19 +51,6 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
 
   const setFilePage = (fileId: string, page: number) => {
     setPageByFile((prev) => ({ ...prev, [fileId]: page }));
-  };
-
-  const openLightbox = (payload: LightboxState) => {
-    setLightbox({
-      fileId: payload.fileId ?? null,
-      src: payload.src ?? null,
-      page: payload.page ?? null,
-      name: payload.name ?? null,
-    });
-  };
-
-  const closeLightbox = () => {
-    setLightbox({ fileId: null, src: null, page: null, name: null });
   };
 
   const loading = status === "loading";
@@ -172,18 +149,8 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
               {/* Image list */}
               <div className="p-4 flex flex-col gap-6">
                 {slice.map((p) => (
-                  <Zoom key={p.page}>
-                    <button
-                      className="relative border bg-white rounded-lg overflow-hidden text-left w-full block focus:outline-none focus:ring-2 focus:ring-red-600"
-                      onClick={() =>
-                        openLightbox({
-                          fileId: f.id,
-                          src: p.url,
-                          page: p.page,
-                          name: f.originalName ?? null,
-                        })
-                      }
-                    >
+                  <div key={p.page} className="relative border bg-white rounded-lg overflow-hidden w-full">
+                    <Zoom>
                       <img
                         src={p.url}
                         className="block w-full h-auto object-contain cursor-zoom-in"
@@ -191,11 +158,11 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
                         referrerPolicy="no-referrer"
                         alt={`${f.originalName || title} — page ${p.page}`}
                       />
-                      <span className="absolute top-2 left-2 text-[10px] bg-black/60 text-white px-2 py-1 rounded font-semibold">
-                        {p.page}
-                      </span>
-                    </button>
-                  </Zoom>
+                    </Zoom>
+                    <span className="absolute top-2 left-2 text-[10px] bg-black/60 text-white px-2 py-1 rounded font-semibold">
+                      {p.page}
+                    </span>
+                  </div>
                 ))}
               </div>
 
@@ -225,25 +192,6 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
           );
         })}
       </div>
-
-      {/* Lightbox */}
-      {lightbox.src && (
-        <div
-          className="fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-6"
-          onClick={closeLightbox}
-          role="dialog"
-          aria-label="Image viewer"
-        >
-          <Zoom>
-            <img
-              src={lightbox.src}
-              className="max-w-full max-h-full rounded-lg shadow-2xl cursor-zoom-in"
-              onClick={(e) => e.stopPropagation()}
-              alt={lightbox.name ?? "Document page"}
-            />
-          </Zoom>
-        </div>
-      )}
     </div>
   );
 }

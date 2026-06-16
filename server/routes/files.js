@@ -11,6 +11,7 @@ router.get('/latest-by-city', generalLimiter, fileCtrl.getLatestByCity);
 
 
 router.get('/by-city/:city/page-images', fileCtrl.listByCityPageImages);
+router.get('/:fileId/page/:page', fileCtrl.renderPdfPage);
 
 
 // Protected routes (require auth)

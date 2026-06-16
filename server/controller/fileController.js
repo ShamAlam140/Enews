@@ -7,6 +7,43 @@ const File = require('../models/File');
 const { uploadsDir } = require('../middleware/upload');
 const { uploadPdfStreamToDrive, deleteFromDrive } = require('../services/driveClient');
 
+// Setup Canvas & DOMException polyfills for pdfjs-dist Node environment compatibility
+const canvas = require('canvas');
+global.DOMMatrix = canvas.DOMMatrix;
+global.DOMPoint = canvas.DOMPoint;
+global.ImageData = canvas.ImageData;
+
+const buffer = require('buffer');
+if (!global.DOMException) {
+  if (buffer.DOMException) {
+    global.DOMException = buffer.DOMException;
+  } else {
+    global.DOMException = class DOMException extends Error {
+      constructor(message, name) {
+        super(message);
+        this.name = name;
+      }
+    };
+  }
+}
+
+// Helper to download PDF from Drive
+async function downloadPdfFromDrive(fileId, destPath) {
+  const { getDrive } = require('../config/drive');
+  const drive = await getDrive();
+  const dest = fs.createWriteStream(destPath);
+  const response = await drive.files.get(
+    { fileId, alt: 'media', supportsAllDrives: true },
+    { responseType: 'stream' }
+  );
+  return new Promise((resolve, reject) => {
+    response.data
+      .on('end', () => resolve(destPath))
+      .on('error', (err) => reject(err))
+      .pipe(dest);
+  });
+}
+
 // ---------- Helper functions ----------
 function normalizeCity(input) {
   if (!input) return undefined;
@@ -358,11 +395,6 @@ exports.listByCityPdfUrls = async (req, res) => {
 
 
 
-// ---------- Helper: Drive viewer/download links ----------
-function buildDrivePageImage(driveId, page = 1, width = 1000) {
-  return `https://drive.google.com/thumbnail?authuser=0&sz=w${width}&id=${driveId}&page=${page}`;
-}
-
 exports.listByCityPageImages = async (req, res) => {
   try {
     const city = String(req.params.city || '').trim().toLowerCase();
@@ -370,7 +402,7 @@ exports.listByCityPageImages = async (req, res) => {
 
     const clamp = (n, min, max) => Math.min(Math.max(parseInt(n, 10) || 0, min), max);
     const limit = clamp(req.query.limit, 1, 100);
-    const pages = clamp(req.query.pages, 1, 60); // ✅ Support up to 60 pages
+    const pages = clamp(req.query.pages, 1, 60);
     const width = clamp(req.query.w, 200, 2000);
 
     const files = await File.find({
@@ -381,14 +413,13 @@ exports.listByCityPageImages = async (req, res) => {
 
     const list = files.map((f) => {
       const driveId = f.driveFileId || null;
+      const actualPages = f.pageCount && f.pageCount > 0 ? f.pageCount : pages;
+      const base = `${req.protocol}://${req.get('host')}/api/v1/files`;
       
-      // ✅ ALWAYS use Google Drive thumbnails (working solution)
-      const pageImages = driveId 
-        ? Array.from({ length: pages }, (_, i) => ({
-            page: i + 1,
-            url: buildDrivePageImage(driveId, i + 1, width),
-          }))
-        : [];
+      const pageImages = Array.from({ length: actualPages }, (_, i) => ({
+        page: i + 1,
+        url: `${base}/${driveId || f._id}/page/${i + 1}`,
+      }));
 
       return {
         id: String(f._id),
@@ -405,5 +436,108 @@ exports.listByCityPageImages = async (req, res) => {
   } catch (err) {
     console.error('[listByCityPageImages] error:', err);
     res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Render PDF Page to Image on the fly using Canvas & PDF.js
+exports.renderPdfPage = async (req, res) => {
+  try {
+    const { fileId, page } = req.params;
+    const pageNum = parseInt(page, 10) || 1;
+
+    // Cache directory inside server/file/cache
+    const cacheDir = path.join(__dirname, '..', 'file', 'cache');
+    if (!fs.existsSync(cacheDir)) {
+      fs.mkdirSync(cacheDir, { recursive: true });
+    }
+
+    const cachedImagePath = path.join(cacheDir, `${fileId}_page_${pageNum}.png`);
+
+    // If cached image exists, serve it directly
+    if (fs.existsSync(cachedImagePath)) {
+      return res.sendFile(cachedImagePath);
+    }
+
+    // Lookup PDF document in database
+    const fileDoc = await File.findOne({
+      $or: [
+        { driveFileId: fileId },
+        { publicId: fileId },
+        { filename: fileId }
+      ]
+    });
+
+    let pdfPath;
+    let tempPathUsed = false;
+
+    if (fileDoc && fileDoc.driveFileId) {
+      // PDF is on Google Drive, download it to a temporary path
+      const tempPdfPath = path.join(cacheDir, `${fileId}_temp.pdf`);
+      console.log(`[renderPdfPage] Downloading PDF ${fileId} from Drive...`);
+      await downloadPdfFromDrive(fileDoc.driveFileId, tempPdfPath);
+      pdfPath = tempPdfPath;
+      tempPathUsed = true;
+    } else {
+      // PDF is stored locally
+      const filename = fileDoc ? fileDoc.filename : fileId;
+      const localFilesDir = path.join(__dirname, '..', 'file');
+      const uploadsDirLocal = path.join(__dirname, '..', 'uploads');
+
+      const path1 = path.join(localFilesDir, filename);
+      const path2 = path.join(uploadsDirLocal, filename);
+
+      if (fs.existsSync(path1)) {
+        pdfPath = path1;
+      } else if (fs.existsSync(path2)) {
+        pdfPath = path2;
+      } else {
+        return res.status(404).json({ error: 'PDF file not found' });
+      }
+    }
+
+    // Render page to image using pdfjs-dist and canvas
+    console.log(`[renderPdfPage] Rendering page ${pageNum} for PDF ${fileId}...`);
+    
+    // Dynamic import of the ESM PDFJS library
+    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const { createCanvas } = require('canvas');
+
+    const pdfBuffer = new Uint8Array(fs.readFileSync(pdfPath));
+    const loadingTask = pdfjsLib.getDocument({ data: pdfBuffer });
+    const pdfDocument = await loadingTask.promise;
+
+    if (pageNum > pdfDocument.numPages || pageNum < 1) {
+      if (tempPathUsed) safeUnlink(pdfPath);
+      return res.status(400).json({ error: `Page number out of bounds (1-${pdfDocument.numPages})` });
+    }
+
+    const pdfPage = await pdfDocument.getPage(pageNum);
+    
+    // Determine the viewport scale (adjust scale for quality/size tradeoff)
+    const scale = 1.8; 
+    const viewport = pdfPage.getViewport({ scale });
+
+    const canvasObj = createCanvas(viewport.width, viewport.height);
+    const context = canvasObj.getContext('2d');
+
+    await pdfPage.render({
+      canvasContext: context,
+      viewport: viewport,
+    }).promise;
+
+    // Save rendered image to cache
+    const buffer = canvasObj.toBuffer('image/png');
+    fs.writeFileSync(cachedImagePath, buffer);
+    console.log(`[renderPdfPage] Rendered page ${pageNum} successfully.`);
+
+    // Cleanup temp PDF if used
+    if (tempPathUsed) {
+      safeUnlink(pdfPath);
+    }
+
+    return res.sendFile(cachedImagePath);
+  } catch (err) {
+    console.error('[renderPdfPage] Error rendering PDF page:', err);
+    return res.status(500).json({ error: 'Failed to render PDF page' });
   }
 };
