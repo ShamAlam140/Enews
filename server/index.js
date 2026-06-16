@@ -54,6 +54,9 @@ dotenv.config();
 
 const app = express();
 
+// Trust proxy settings for secure rate limiting behind proxies (like Render)
+app.set('trust proxy', 1);
+
 // Secure headers with Helmet
 // Allow cross-origin resource policy so frontend can load files securely
 app.use(
@@ -74,7 +77,8 @@ app.use(
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       if (allowedOrigins.indexOf(origin) === -1) {
-        return callback(new Error('CORS policy: access from this origin is not allowed'), false);
+        console.warn(`🔒 CORS blocked origin: ${origin}`);
+        return callback(new Error(`CORS policy: access from origin ${origin} is not allowed`), false);
       }
       return callback(null, true);
     },
