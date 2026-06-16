@@ -2,7 +2,7 @@ import axios from 'axios';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 
 export const http = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://enews-xfkz.onrender.com/api/v1',
 });
 
 http.interceptors.request.use((config) => {
@@ -19,7 +19,7 @@ export async function refreshAccessToken() {
   if (!refreshToken) return null;
   try {
     const res = await axios.post(
-      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1'}/auth/refresh`,
+      `${process.env.NEXT_PUBLIC_API_URL || 'https://enews-xfkz.onrender.com/api/v1'}/auth/refresh`,
       { refreshToken }
     );
     const newAccessToken = res.data?.accessToken;
