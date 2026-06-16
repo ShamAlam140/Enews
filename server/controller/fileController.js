@@ -506,6 +506,27 @@ class NodeCanvasFactory {
 // ─── Download lock to prevent concurrent downloads of same PDF ───
 const _downloadLocks = new Map(); // fileId → Promise
 
+// Simple Mutex to prevent concurrent PDF page renders from causing memory (OOM) crashes
+class SimpleMutex {
+  constructor() {
+    this.queue = Promise.resolve();
+  }
+  async run(fn) {
+    let resolveLock;
+    const lockPromise = new Promise((r) => { resolveLock = r; });
+    const previous = this.queue;
+    this.queue = lockPromise;
+    try {
+      await previous;
+      return await fn();
+    } finally {
+      resolveLock();
+    }
+  }
+}
+const renderMutex = new SimpleMutex();
+
+
 async function ensurePdfCached(driveFileId, cacheDir) {
   const cachedPdfPath = path.join(cacheDir, `${driveFileId}.pdf`);
 
@@ -596,55 +617,65 @@ exports.renderPdfPage = async (req, res) => {
       }
     }
 
-    // Render page to image using pdfjs-dist v3.x and canvas
-    console.log(`[renderPdfPage] 🖼️  Rendering page ${pageNum} for PDF ${fileId}...`);
+    // Render page to image using pdfjs-dist v3.x and canvas (wrapped in Mutex to prevent OOM)
+    await renderMutex.run(async () => {
+      // Check again inside the lock in case it was rendered while waiting in queue
+      if (fs.existsSync(cachedImagePath)) {
+        return;
+      }
 
-    // ✅ pdfjs-dist v3.x uses CommonJS require (not ESM import)
-    const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
+      console.log(`[renderPdfPage] 🖼️  Rendering page ${pageNum} for PDF ${fileId}...`);
 
-    const pdfBuffer = new Uint8Array(fs.readFileSync(pdfPath));
-    const canvasFactory = new NodeCanvasFactory();
+      // ✅ pdfjs-dist v3.x uses CommonJS require (not ESM import)
+      const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
 
-    const loadingTask = pdfjsLib.getDocument({
-      data: pdfBuffer,
-      canvasFactory: canvasFactory,
-      isEvalSupported: false,
+      const pdfBuffer = new Uint8Array(fs.readFileSync(pdfPath));
+      const canvasFactory = new NodeCanvasFactory();
+
+      const loadingTask = pdfjsLib.getDocument({
+        data: pdfBuffer,
+        canvasFactory: canvasFactory,
+        isEvalSupported: false,
+      });
+      const pdfDocument = await loadingTask.promise;
+
+      if (pageNum > pdfDocument.numPages || pageNum < 1) {
+        const error = new Error(`Page number out of bounds (1-${pdfDocument.numPages})`);
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const pdfPage = await pdfDocument.getPage(pageNum);
+
+      // Determine the viewport scale (adjust scale for quality/size tradeoff)
+      const scale = 2.0;
+      const viewport = pdfPage.getViewport({ scale });
+
+      const { canvas: canvasObj, context } = canvasFactory.create(
+        Math.floor(viewport.width),
+        Math.floor(viewport.height)
+      );
+
+      await pdfPage.render({
+        canvasContext: context,
+        viewport: viewport,
+        canvasFactory: canvasFactory,
+      }).promise;
+
+      // Save rendered image to cache
+      const imgBuffer = canvasObj.toBuffer('image/png');
+      fs.writeFileSync(cachedImagePath, imgBuffer);
+      console.log(`[renderPdfPage] ✅ Rendered page ${pageNum} successfully (${(imgBuffer.length / 1024).toFixed(0)} KB).`);
+
+      // Cleanup: destroy the canvas
+      canvasFactory.destroy({ canvas: canvasObj, context });
     });
-    const pdfDocument = await loadingTask.promise;
-
-    if (pageNum > pdfDocument.numPages || pageNum < 1) {
-      return res.status(400).json({ error: `Page number out of bounds (1-${pdfDocument.numPages})` });
-    }
-
-    const pdfPage = await pdfDocument.getPage(pageNum);
-
-    // Determine the viewport scale (adjust scale for quality/size tradeoff)
-    const scale = 2.0;
-    const viewport = pdfPage.getViewport({ scale });
-
-    const { canvas: canvasObj, context } = canvasFactory.create(
-      Math.floor(viewport.width),
-      Math.floor(viewport.height)
-    );
-
-    await pdfPage.render({
-      canvasContext: context,
-      viewport: viewport,
-      canvasFactory: canvasFactory,
-    }).promise;
-
-    // Save rendered image to cache
-    const imgBuffer = canvasObj.toBuffer('image/png');
-    fs.writeFileSync(cachedImagePath, imgBuffer);
-    console.log(`[renderPdfPage] ✅ Rendered page ${pageNum} successfully (${(imgBuffer.length / 1024).toFixed(0)} KB).`);
-
-    // Cleanup: destroy the canvas
-    canvasFactory.destroy({ canvas: canvasObj, context });
 
     return res.sendFile(cachedImagePath);
   } catch (err) {
     console.error('[renderPdfPage] ❌ Error rendering PDF page:', err);
-    return res.status(500).json({ error: 'Failed to render PDF page' });
+    const status = err.statusCode || 500;
+    return res.status(status).json({ error: err.message || 'Failed to render PDF page' });
   }
 };
 
