@@ -62,3 +62,7 @@ coverage
 
 # Local development
 *.local
+
+# PDF Render Cache
+file/cache/
+

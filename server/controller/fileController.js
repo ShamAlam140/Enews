@@ -2,7 +2,7 @@
 const path = require('path');
 const fs = require('fs');
 const util = require('util');
-const pdfParse = require('pdf-parse');
+// pdfjs-dist v3.x for page counting (replaces pdf-parse which is incompatible)
 const File = require('../models/File');
 const { uploadsDir } = require('../middleware/upload');
 const { uploadPdfStreamToDrive, deleteFromDrive } = require('../services/driveClient');
@@ -62,9 +62,14 @@ function logObj(label, obj) {
 
 async function getPdfPageCount(filePath) {
   try {
-    const data = await pdfParse(fs.readFileSync(filePath));
-    return data.numpages || 0;
-  } catch {
+    const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
+    const pdfBuffer = new Uint8Array(fs.readFileSync(filePath));
+    const doc = await pdfjsLib.getDocument({ data: pdfBuffer, isEvalSupported: false }).promise;
+    const numPages = doc.numPages || 0;
+    doc.destroy(); // Free memory
+    return numPages;
+  } catch (err) {
+    console.error('[getPdfPageCount] Error:', err.message);
     return 0;
   }
 }
@@ -402,7 +407,6 @@ exports.listByCityPageImages = async (req, res) => {
 
     const clamp = (n, min, max) => Math.min(Math.max(parseInt(n, 10) || 0, min), max);
     const limit = clamp(req.query.limit, 1, 100);
-    const pages = clamp(req.query.pages, 1, 60);
     const width = clamp(req.query.w, 200, 2000);
 
     const files = await File.find({
@@ -411,9 +415,47 @@ exports.listByCityPageImages = async (req, res) => {
       isActive: true,
     }).sort({ uploadedAt: -1 }).limit(limit);
 
-    const list = files.map((f) => {
+    const list = [];
+
+    for (const f of files) {
       const driveId = f.driveFileId || null;
-      const actualPages = f.pageCount && f.pageCount > 0 ? f.pageCount : pages;
+      let actualPages = f.pageCount && f.pageCount > 0 ? f.pageCount : 0;
+
+      // ✅ If pageCount is 0/null, get real page count from cached/downloaded PDF
+      if (actualPages === 0 && driveId) {
+        try {
+          const cacheDir = path.join(__dirname, '..', 'file', 'cache');
+          if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+
+          const pdfPath = await ensurePdfCached(driveId, cacheDir);
+          actualPages = await getPdfPageCount(pdfPath);
+
+          // ✅ Update DB so we don't have to do this again
+          if (actualPages > 0) {
+            await File.findByIdAndUpdate(f._id, { pageCount: actualPages });
+            console.log(`[listByCityPageImages] ✅ Updated pageCount for ${f.originalName}: ${actualPages}`);
+          }
+        } catch (err) {
+          console.error(`[listByCityPageImages] ⚠️ Could not get page count for ${f.originalName}:`, err.message);
+          actualPages = 1; // Fallback to at least 1 page
+        }
+      }
+
+      // If still 0 (local file), try reading from local path
+      if (actualPages === 0 && !driveId) {
+        const localFilesDir = path.join(__dirname, '..', 'file');
+        const localPath = path.join(localFilesDir, f.filename || '');
+        if (fs.existsSync(localPath)) {
+          actualPages = await getPdfPageCount(localPath);
+          if (actualPages > 0) {
+            await File.findByIdAndUpdate(f._id, { pageCount: actualPages });
+          }
+        }
+      }
+
+      // Ensure at least 1 page
+      if (actualPages <= 0) actualPages = 1;
+
       const base = `${req.protocol}://${req.get('host')}/api/v1/files`;
       
       const pageImages = Array.from({ length: actualPages }, (_, i) => ({
@@ -421,16 +463,16 @@ exports.listByCityPageImages = async (req, res) => {
         url: `${base}/${driveId || f._id}/page/${i + 1}`,
       }));
 
-      return {
+      list.push({
         id: String(f._id),
         originalName: f.originalName,
         uploadedAt: f.uploadedAt,
-        pageCount: Number(f.pageCount || 0),
+        pageCount: actualPages,
         driveFileId: driveId,
         viewerUrl: driveId ? `https://drive.google.com/file/d/${driveId}/preview` : null,
         pageImages,
-      };
-    });
+      });
+    }
 
     res.json({ success: true, city, count: list.length, files: list });
   } catch (err) {
@@ -438,6 +480,70 @@ exports.listByCityPageImages = async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 };
+
+// ─── NodeCanvasFactory for pdfjs-dist in Node.js ───
+// pdfjs-dist v3.x needs this to create canvases for rendering in Node.js
+const { createCanvas: _createCanvas } = require('canvas');
+
+class NodeCanvasFactory {
+  create(width, height) {
+    const canvas = _createCanvas(width, height);
+    const context = canvas.getContext('2d');
+    return { canvas, context };
+  }
+  reset(canvasAndContext, width, height) {
+    canvasAndContext.canvas.width = width;
+    canvasAndContext.canvas.height = height;
+  }
+  destroy(canvasAndContext) {
+    canvasAndContext.canvas.width = 0;
+    canvasAndContext.canvas.height = 0;
+    canvasAndContext.canvas = null;
+    canvasAndContext.context = null;
+  }
+}
+
+// ─── Download lock to prevent concurrent downloads of same PDF ───
+const _downloadLocks = new Map(); // fileId → Promise
+
+async function ensurePdfCached(driveFileId, cacheDir) {
+  const cachedPdfPath = path.join(cacheDir, `${driveFileId}.pdf`);
+
+  // Already downloaded & cached on disk
+  if (fs.existsSync(cachedPdfPath)) {
+    return cachedPdfPath;
+  }
+
+  // Another request is already downloading this PDF — wait for it
+  if (_downloadLocks.has(driveFileId)) {
+    await _downloadLocks.get(driveFileId);
+    if (fs.existsSync(cachedPdfPath)) return cachedPdfPath;
+  }
+
+  // Download with lock
+  const downloadPromise = (async () => {
+    // Download to a unique temp file first, then rename (atomic)
+    const tmpPath = path.join(cacheDir, `${driveFileId}_dl_${Date.now()}.tmp`);
+    try {
+      console.log(`[renderPdfPage] ⬇️  Downloading PDF ${driveFileId} from Drive...`);
+      await downloadPdfFromDrive(driveFileId, tmpPath);
+      fs.renameSync(tmpPath, cachedPdfPath);
+      console.log(`[renderPdfPage] ✅ PDF cached: ${cachedPdfPath}`);
+    } catch (err) {
+      safeUnlink(tmpPath);
+      throw err;
+    }
+  })();
+
+  _downloadLocks.set(driveFileId, downloadPromise);
+  try {
+    await downloadPromise;
+  } finally {
+    _downloadLocks.delete(driveFileId);
+  }
+
+  return cachedPdfPath;
+}
 
 // Render PDF Page to Image on the fly using Canvas & PDF.js
 exports.renderPdfPage = async (req, res) => {
@@ -468,15 +574,10 @@ exports.renderPdfPage = async (req, res) => {
     });
 
     let pdfPath;
-    let tempPathUsed = false;
 
     if (fileDoc && fileDoc.driveFileId) {
-      // PDF is on Google Drive, download it to a temporary path
-      const tempPdfPath = path.join(cacheDir, `${fileId}_temp.pdf`);
-      console.log(`[renderPdfPage] Downloading PDF ${fileId} from Drive...`);
-      await downloadPdfFromDrive(fileDoc.driveFileId, tempPdfPath);
-      pdfPath = tempPdfPath;
-      tempPathUsed = true;
+      // PDF is on Google Drive — download once & cache
+      pdfPath = await ensurePdfCached(fileDoc.driveFileId, cacheDir);
     } else {
       // PDF is stored locally
       const filename = fileDoc ? fileDoc.filename : fileId;
@@ -495,49 +596,55 @@ exports.renderPdfPage = async (req, res) => {
       }
     }
 
-    // Render page to image using pdfjs-dist and canvas
-    console.log(`[renderPdfPage] Rendering page ${pageNum} for PDF ${fileId}...`);
-    
-    // Dynamic import of the ESM PDFJS library
-    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-    const { createCanvas } = require('canvas');
+    // Render page to image using pdfjs-dist v3.x and canvas
+    console.log(`[renderPdfPage] 🖼️  Rendering page ${pageNum} for PDF ${fileId}...`);
+
+    // ✅ pdfjs-dist v3.x uses CommonJS require (not ESM import)
+    const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
 
     const pdfBuffer = new Uint8Array(fs.readFileSync(pdfPath));
-    const loadingTask = pdfjsLib.getDocument({ data: pdfBuffer });
+    const canvasFactory = new NodeCanvasFactory();
+
+    const loadingTask = pdfjsLib.getDocument({
+      data: pdfBuffer,
+      canvasFactory: canvasFactory,
+      isEvalSupported: false,
+    });
     const pdfDocument = await loadingTask.promise;
 
     if (pageNum > pdfDocument.numPages || pageNum < 1) {
-      if (tempPathUsed) safeUnlink(pdfPath);
       return res.status(400).json({ error: `Page number out of bounds (1-${pdfDocument.numPages})` });
     }
 
     const pdfPage = await pdfDocument.getPage(pageNum);
-    
+
     // Determine the viewport scale (adjust scale for quality/size tradeoff)
-    const scale = 1.8; 
+    const scale = 2.0;
     const viewport = pdfPage.getViewport({ scale });
 
-    const canvasObj = createCanvas(viewport.width, viewport.height);
-    const context = canvasObj.getContext('2d');
+    const { canvas: canvasObj, context } = canvasFactory.create(
+      Math.floor(viewport.width),
+      Math.floor(viewport.height)
+    );
 
     await pdfPage.render({
       canvasContext: context,
       viewport: viewport,
+      canvasFactory: canvasFactory,
     }).promise;
 
     // Save rendered image to cache
-    const buffer = canvasObj.toBuffer('image/png');
-    fs.writeFileSync(cachedImagePath, buffer);
-    console.log(`[renderPdfPage] Rendered page ${pageNum} successfully.`);
+    const imgBuffer = canvasObj.toBuffer('image/png');
+    fs.writeFileSync(cachedImagePath, imgBuffer);
+    console.log(`[renderPdfPage] ✅ Rendered page ${pageNum} successfully (${(imgBuffer.length / 1024).toFixed(0)} KB).`);
 
-    // Cleanup temp PDF if used
-    if (tempPathUsed) {
-      safeUnlink(pdfPath);
-    }
+    // Cleanup: destroy the canvas
+    canvasFactory.destroy({ canvas: canvasObj, context });
 
     return res.sendFile(cachedImagePath);
   } catch (err) {
-    console.error('[renderPdfPage] Error rendering PDF page:', err);
+    console.error('[renderPdfPage] ❌ Error rendering PDF page:', err);
     return res.status(500).json({ error: 'Failed to render PDF page' });
   }
 };
+

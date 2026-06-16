@@ -20,12 +20,27 @@ async function fetchWithTimeout(input: RequestInfo, init?: RequestInit & { timeo
 /** Get latest file per city */
 export async function getLatestByCity(): Promise<CityLatest[]> {
   const url = `${API_BASE}/files/latest-by-city`;
-  const res = await fetchWithTimeout(url, {
-    headers: { Accept: "application/json" },
-    timeout: 15000,
-  });
-  const json = await res.json();
-  return Array.isArray(json?.data) ? (json.data as CityLatest[]) : [];
+  console.log(`[getLatestByCity] 🌐 Requesting: ${url}`);
+  try {
+    const res = await fetchWithTimeout(url, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      timeout: 15000,
+    });
+    console.log(`[getLatestByCity] 🟢 Response Status: ${res.status} ${res.statusText}`);
+    const json = await res.json();
+    console.log(`[getLatestByCity] 📦 Response JSON:`, JSON.stringify(json, null, 2));
+    
+    if (json && Array.isArray(json.data)) {
+      console.log(`[getLatestByCity] ✅ Found ${json.data.length} cities.`);
+      return json.data as CityLatest[];
+    }
+    console.warn(`[getLatestByCity] ⚠️ Response data is not an array:`, json);
+    return [];
+  } catch (err: any) {
+    console.error(`[getLatestByCity] ❌ Error fetching from ${url}:`, err.message || err);
+    throw err;
+  }
 }
 
 /** Helper to build Drive thumb if needed */

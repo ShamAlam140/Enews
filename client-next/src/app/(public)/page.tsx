@@ -8,8 +8,7 @@ export const metadata: Metadata = {
   description: 'Read the latest e-papers and news documents from Khabre Aaj Tak. Find daily news and updates organized by city.',
 };
 
-// Revalidate this page at most every 60 seconds for high performance ISR
-export const revalidate = 60;
+export const dynamic = 'force-dynamic';
 
 export default async function Page() {
   let initialCities: CityLatest[] = [];

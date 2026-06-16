@@ -17,8 +17,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-// Revalidate this page at most every 60 seconds
-export const revalidate = 60;
+export const dynamic = 'force-dynamic';
 
 export default async function Page({ params }: Props) {
   const city = params.city || '';
