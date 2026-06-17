@@ -506,25 +506,31 @@ class NodeCanvasFactory {
 // ─── Download lock to prevent concurrent downloads of same PDF ───
 const _downloadLocks = new Map(); // fileId → Promise
 
-// Simple Mutex to prevent concurrent PDF page renders from causing memory (OOM) crashes
-class SimpleMutex {
-  constructor() {
-    this.queue = Promise.resolve();
+// Simple Semaphore to limit concurrent PDF page renders to prevent CPU overloading/OOM
+class SimpleSemaphore {
+  constructor(max) {
+    this.max = max;
+    this.running = 0;
+    this.queue = [];
   }
-  async run(fn) {
-    let resolveLock;
-    const lockPromise = new Promise((r) => { resolveLock = r; });
-    const previous = this.queue;
-    this.queue = lockPromise;
-    try {
-      await previous;
-      return await fn();
-    } finally {
-      resolveLock();
+  async acquire() {
+    if (this.running < this.max) {
+      this.running++;
+      return;
+    }
+    await new Promise((r) => this.queue.push(r));
+  }
+  release() {
+    this.running--;
+    if (this.queue.length > 0) {
+      this.running++;
+      const next = this.queue.shift();
+      next();
     }
   }
 }
-const renderMutex = new SimpleMutex();
+const renderSemaphore = new SimpleSemaphore(4); // Allow up to 4 parallel renders
+
 
 
 async function ensurePdfCached(driveFileId, cacheDir) {
@@ -578,7 +584,7 @@ exports.renderPdfPage = async (req, res) => {
       fs.mkdirSync(cacheDir, { recursive: true });
     }
 
-    const cachedImagePath = path.join(cacheDir, `${fileId}_page_${pageNum}.png`);
+    const cachedImagePath = path.join(cacheDir, `${fileId}_page_${pageNum}.jpg`);
 
     // If cached image exists, serve it directly
     if (fs.existsSync(cachedImagePath)) {
@@ -617,59 +623,60 @@ exports.renderPdfPage = async (req, res) => {
       }
     }
 
-    // Render page to image using pdfjs-dist v3.x and canvas (wrapped in Mutex to prevent OOM)
-    await renderMutex.run(async () => {
+    // Render page to image using pdfjs-dist v3.x and canvas (wrapped in Semaphore to control parallel CPU/Memory load)
+    await renderSemaphore.acquire();
+    try {
       // Check again inside the lock in case it was rendered while waiting in queue
-      if (fs.existsSync(cachedImagePath)) {
-        return;
+      if (!fs.existsSync(cachedImagePath)) {
+        console.log(`[renderPdfPage] 🖼️  Rendering page ${pageNum} for PDF ${fileId} (JPEG, scale 1.8)...`);
+
+        // ✅ pdfjs-dist v3.x uses CommonJS require (not ESM import)
+        const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
+
+        const pdfBuffer = new Uint8Array(fs.readFileSync(pdfPath));
+        const canvasFactory = new NodeCanvasFactory();
+
+        const loadingTask = pdfjsLib.getDocument({
+          data: pdfBuffer,
+          canvasFactory: canvasFactory,
+          isEvalSupported: false,
+        });
+        const pdfDocument = await loadingTask.promise;
+
+        if (pageNum > pdfDocument.numPages || pageNum < 1) {
+          const error = new Error(`Page number out of bounds (1-${pdfDocument.numPages})`);
+          error.statusCode = 400;
+          throw error;
+        }
+
+        const pdfPage = await pdfDocument.getPage(pageNum);
+
+        // Determine the viewport scale (adjust scale for quality/size tradeoff)
+        const scale = 1.8;
+        const viewport = pdfPage.getViewport({ scale });
+
+        const { canvas: canvasObj, context } = canvasFactory.create(
+          Math.floor(viewport.width),
+          Math.floor(viewport.height)
+        );
+
+        await pdfPage.render({
+          canvasContext: context,
+          viewport: viewport,
+          canvasFactory: canvasFactory,
+        }).promise;
+
+        // Save rendered image to cache using JPEG format at 80% quality
+        const imgBuffer = canvasObj.toBuffer('image/jpeg', { quality: 0.8 });
+        fs.writeFileSync(cachedImagePath, imgBuffer);
+        console.log(`[renderPdfPage] ✅ Rendered page ${pageNum} successfully (${(imgBuffer.length / 1024).toFixed(0)} KB).`);
+
+        // Cleanup: destroy the canvas
+        canvasFactory.destroy({ canvas: canvasObj, context });
       }
-
-      console.log(`[renderPdfPage] 🖼️  Rendering page ${pageNum} for PDF ${fileId}...`);
-
-      // ✅ pdfjs-dist v3.x uses CommonJS require (not ESM import)
-      const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
-
-      const pdfBuffer = new Uint8Array(fs.readFileSync(pdfPath));
-      const canvasFactory = new NodeCanvasFactory();
-
-      const loadingTask = pdfjsLib.getDocument({
-        data: pdfBuffer,
-        canvasFactory: canvasFactory,
-        isEvalSupported: false,
-      });
-      const pdfDocument = await loadingTask.promise;
-
-      if (pageNum > pdfDocument.numPages || pageNum < 1) {
-        const error = new Error(`Page number out of bounds (1-${pdfDocument.numPages})`);
-        error.statusCode = 400;
-        throw error;
-      }
-
-      const pdfPage = await pdfDocument.getPage(pageNum);
-
-      // Determine the viewport scale (adjust scale for quality/size tradeoff)
-      const scale = 2.0;
-      const viewport = pdfPage.getViewport({ scale });
-
-      const { canvas: canvasObj, context } = canvasFactory.create(
-        Math.floor(viewport.width),
-        Math.floor(viewport.height)
-      );
-
-      await pdfPage.render({
-        canvasContext: context,
-        viewport: viewport,
-        canvasFactory: canvasFactory,
-      }).promise;
-
-      // Save rendered image to cache
-      const imgBuffer = canvasObj.toBuffer('image/png');
-      fs.writeFileSync(cachedImagePath, imgBuffer);
-      console.log(`[renderPdfPage] ✅ Rendered page ${pageNum} successfully (${(imgBuffer.length / 1024).toFixed(0)} KB).`);
-
-      // Cleanup: destroy the canvas
-      canvasFactory.destroy({ canvas: canvasObj, context });
-    });
+    } finally {
+      renderSemaphore.release();
+    }
 
     return res.sendFile(cachedImagePath);
   } catch (err) {
