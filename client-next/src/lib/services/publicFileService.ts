@@ -1,7 +1,7 @@
 import type { CityLatest } from "../types/files";
 
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "https://enews-xfkz.onrender.com/api/v1";
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "https://alamsusalabs-khabre-backend.hf.space/api/v1";
 
 async function fetchWithTimeout(input: RequestInfo, init?: RequestInit & { timeout?: number }) {
   const { timeout = 15000, ...rest } = init || {};
