@@ -31,6 +31,9 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
     return initialMap;
   });
 
+  // Track loading status of individual images
+  const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({});
+
   const reload = async () => {
     setStatus("loading");
     setError(null);
@@ -148,22 +151,42 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
 
               {/* Image list */}
               <div className="p-4 flex flex-col gap-6">
-                {slice.map((p) => (
-                  <div key={p.page} className="relative border bg-white rounded-lg overflow-hidden w-full">
-                    <Zoom>
-                      <img
-                        src={p.url}
-                        className="block w-full h-auto object-contain cursor-zoom-in"
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                        alt={`${f.originalName || title} — page ${p.page}`}
-                      />
-                    </Zoom>
-                    <span className="absolute top-2 left-2 text-[10px] bg-black/60 text-white px-2 py-1 rounded font-semibold">
-                      {p.page}
-                    </span>
-                  </div>
-                ))}
+                {slice.map((p) => {
+                  const imageKey = `${f.id}_${p.page}`;
+                  const isLoaded = loadedImages[imageKey];
+
+                  return (
+                    <div key={p.page} className="relative border bg-gray-50 rounded-lg overflow-hidden w-full min-h-[400px] md:min-h-[600px] flex items-center justify-center">
+                      {/* Premium Shimmer Skeleton Loader */}
+                      {!isLoaded && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100 animate-pulse">
+                          {/* Animated Shimmer lines */}
+                          <div className="w-12 h-12 rounded-full border-4 border-gray-200 border-t-red-600 animate-spin mb-3"></div>
+                          <span className="text-xs text-gray-500 font-semibold tracking-wider">
+                            Loading Page {p.page}...
+                          </span>
+                        </div>
+                      )}
+                      
+                      <Zoom>
+                        <img
+                          src={p.url}
+                          onLoad={() => setLoadedImages(prev => ({ ...prev, [imageKey]: true }))}
+                          className={`block w-full h-auto object-contain cursor-zoom-in transition-all duration-700 ease-out ${
+                            isLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-95 absolute'
+                          }`}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          alt={`${f.originalName || title} — page ${p.page}`}
+                        />
+                      </Zoom>
+                      
+                      <span className="absolute top-2 left-2 text-[10px] bg-black/60 text-white px-2 py-1 rounded font-semibold z-10">
+                        {p.page}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Pagination */}
