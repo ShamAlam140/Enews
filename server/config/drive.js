@@ -1,47 +1,37 @@
-// // config/drive.js
-// require('dotenv').config();
-// const { google } = require('googleapis');
-
-// async function getDrive() {
-//   const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-//   const privateKeyRaw = process.env.GOOGLE_PRIVATE_KEY || '';
-//   if (!clientEmail) throw new Error('GOOGLE_SERVICE_ACCOUNT_EMAIL missing');
-//   if (!privateKeyRaw) throw new Error('GOOGLE_PRIVATE_KEY missing');
-
-//   // \n normalization (safe for both one-line and multiline)
-//   const private_key = privateKeyRaw.includes('\\n')
-//     ? privateKeyRaw.replace(/\\n/g, '\n')
-//     : privateKeyRaw;
-
-//   const auth = new google.auth.GoogleAuth({
-//     scopes: ['https://www.googleapis.com/auth/drive'],
-//     credentials: {
-//       client_email: clientEmail,
-//       private_key,
-//     },
-//   });
-
-//   const client = await auth.getClient();
-
-//   // 🔎 DEBUG: access token check (keep for now)
-//   const token = await auth.getAccessToken();
-//   console.log('[drive-auth] email:', clientEmail);
-//   console.log('[drive-auth] token len:', token ? String(token).length : 0);
-
-//   return google.drive({ version: 'v3', auth: client });
-// }
-
-// module.exports = { getDrive };
 require('dotenv').config();
 const { google } = require('googleapis');
 
 async function getDrive() {
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const privateKeyRaw = process.env.GOOGLE_PRIVATE_KEY;
+
+  if (clientEmail && privateKeyRaw) {
+    console.log('[drive-auth] Initializing with Service Account...');
+    // \n normalization (safe for both one-line and multiline)
+    const private_key = privateKeyRaw.includes('\\n')
+      ? privateKeyRaw.replace(/\\n/g, '\n')
+      : privateKeyRaw;
+
+    const auth = new google.auth.GoogleAuth({
+      scopes: ['https://www.googleapis.com/auth/drive'],
+      credentials: {
+        client_email: clientEmail,
+        private_key,
+      },
+    });
+
+    const client = await auth.getClient();
+    return google.drive({ version: 'v3', auth: client });
+  }
+
+  // Fallback to OAuth 2.0 Client credentials
+  console.log('[drive-auth] Service Account credentials missing, trying OAuth2...');
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
 
   if (!clientId || !clientSecret || !refreshToken) {
-    throw new Error('Google OAuth 2.0 credentials (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN) are missing in environment');
+    throw new Error('Google Drive credentials missing in environment. Please provide either GOOGLE_SERVICE_ACCOUNT_EMAIL & GOOGLE_PRIVATE_KEY or OAuth2 credentials (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN).');
   }
 
   const oauth2Client = new google.auth.OAuth2(
@@ -66,3 +56,4 @@ async function getDrive() {
 }
 
 module.exports = { getDrive };
+
