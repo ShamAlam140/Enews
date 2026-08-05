@@ -300,39 +300,23 @@ exports.getLatestByCity = async (req, res) => {
       .sort({ uploadedAt: -1 })
       .select('city thumbUrl driveFileId uploadedAt originalName path url');
 
-    const cityMap = new Map();
+    const result = pdfs.map(pdf => {
+      const thumbUrl = pdf.driveFileId
+        ? `https://drive.google.com/thumbnail?id=${pdf.driveFileId}&sz=w1600`
+        : (pdf.path || pdf.url);
 
-    pdfs.forEach(pdf => {
-      if (!pdf.city) return;
-      const cityLower = String(pdf.city).toLowerCase();
-
-      if (!cityMap.has(cityLower) || (cityMap.get(cityLower).uploadedAt < pdf.uploadedAt)) {
-        // ✅ Prioritize Google Drive URLs if driveFileId exists, otherwise use local path/url
-        const thumbUrl = pdf.driveFileId
-          ? `https://drive.google.com/thumbnail?id=${pdf.driveFileId}&sz=w1600`
-          : (pdf.path || pdf.url);
-
-        cityMap.set(cityLower, {
-          city: pdf.city,
-          previewUrl: pdf.driveFileId
-            ? `https://drive.google.com/file/d/${pdf.driveFileId}/preview`
-            : (pdf.path || pdf.url),
-          thumbUrl: thumbUrl,
-          uploadedAt: pdf.uploadedAt,
-          originalName: pdf.originalName,
-          driveFileId: pdf.driveFileId
-        });
-      }
+      return {
+        id: String(pdf._id),
+        city: pdf.city,
+        previewUrl: pdf.driveFileId
+          ? `https://drive.google.com/file/d/${pdf.driveFileId}/preview`
+          : (pdf.path || pdf.url),
+        thumbUrl: thumbUrl,
+        date: pdf.uploadedAt,
+        originalName: pdf.originalName,
+        driveFileId: pdf.driveFileId
+      };
     });
-
-    const result = Array.from(cityMap.values()).map(item => ({
-      city: item.city,
-      previewUrl: item.previewUrl,
-      thumbUrl: item.thumbUrl,
-      date: item.uploadedAt,
-      originalName: item.originalName,
-      driveFileId: item.driveFileId
-    }));
 
     return res.json({ success: true, data: result, count: result.length });
   } catch (err) {

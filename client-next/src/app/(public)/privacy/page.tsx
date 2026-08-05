@@ -48,7 +48,7 @@ export default function Privacy() {
               <p className="text-blue-800">
                 If you have any questions about our privacy practices, please contact us at:
                 <br />
-                <strong>privacy@khabreaajtak.co.in</strong>
+                <strong>khabreaajtak1@gmail.com</strong>
               </p>
             </div>
           </div>

@@ -1,4 +1,5 @@
 export type CityLatest = {
+  id: string;
   city: string;
   date: string;
   originalName?: string;

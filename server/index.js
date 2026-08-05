@@ -99,6 +99,7 @@ const apiBase = `/api/v1`;
 app.use(`${apiBase}/auth`, require('./routes/auth'));
 app.use(`${apiBase}/files`, require('./routes/files'));
 app.use(`${apiBase}/stats`, require('./routes/stats'));
+app.use(`${apiBase}/ads`, require('./routes/ads'));
 
 // Global Error Handler (prevents stack leaks in production)
 app.use((err, req, res, next) => {

@@ -80,6 +80,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           >
             Upload Images
           </Link>
+
+          <Link
+            href="/admin/ads"
+            className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors
+            ${isActive('/admin/ads') ? 'bg-white text-gray-900' : 'text-white/85 hover:bg-white/10'}`}
+          >
+            Manage Ads
+          </Link>
         </nav>
 
         <div className="mt-6 border-t border-white/10 pt-4 text-xs text-white/60">

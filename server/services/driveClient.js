@@ -98,4 +98,55 @@ async function deleteFromDrive(fileId) {
   }
 }
 
-module.exports = { uploadPdfStreamToDrive, deleteFromDrive };
+/**
+ * Upload a generic file stream to Google Drive (public), inside the given folder.
+ *
+ * @param {Readable} stream - fs.createReadStream(tempFilePath)
+ * @param {string} originalName - e.g. "ad.png"
+ * @param {string} folderId - Drive folder ID
+ * @param {string} mimeType - file mimetype
+ */
+async function uploadFileStreamToDrive(stream, originalName, folderId, mimeType = 'application/octet-stream') {
+  const drive = await getDrive();
+
+  // Create the file in your shared folder
+  const create = await drive.files.create({
+    requestBody: {
+      name: originalName,
+      parents: [folderId],
+      mimeType: mimeType,
+    },
+    media: {
+      mimeType: mimeType,
+      body: stream,
+    },
+    fields: 'id,name,mimeType,webViewLink,webContentLink,thumbnailLink',
+    supportsAllDrives: true,
+  });
+
+  const fileId = create.data.id;
+
+  // Make file public
+  await drive.permissions.create({
+    fileId,
+    requestBody: { role: 'reader', type: 'anyone' },
+    supportsAllDrives: true,
+  });
+
+  // Friendly URLs
+  const publicUrl   = `https://drive.google.com/uc?id=${fileId}&export=view`;
+  const downloadUrl = `https://drive.google.com/uc?id=${fileId}&export=download`;
+
+  return {
+    fileId,
+    name: create.data.name,
+    mimeType: create.data.mimeType,
+    publicUrl,
+    downloadUrl,
+    webViewLink: create.data.webViewLink,
+    webContentLink: create.data.webContentLink,
+    thumbnailLink: create.data.thumbnailLink,
+  };
+}
+
+module.exports = { uploadPdfStreamToDrive, uploadFileStreamToDrive, deleteFromDrive };

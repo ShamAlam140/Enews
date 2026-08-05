@@ -25,13 +25,13 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
             {/* Logo */}
             <Link href="/" className="flex items-center gap-3 shrink-0">
               <img 
-                src="/logo.png" 
+                src="/logo.jpeg" 
                 alt="Khabre Aaj Tak" 
-                className="w-10 h-10 md:w-11 md:h-11 object-contain rounded-full border border-gray-100 shadow-sm" 
+                className="w-12 h-12 md:w-14 md:h-14 object-contain rounded-full border border-gray-100 shadow-sm" 
               />
               <div className="flex flex-col">
-                <span className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight leading-tight">Khabre Aaj Tak</span>
-                <span className="text-[10px] md:text-xs text-red-600 font-semibold">Trusted News Source</span>
+                <span className="text-xl md:text-2xl font-bold text-blue-600 tracking-tight leading-tight">खबरें आज तक</span>
+                <span className="text-[10px] md:text-xs text-red-600 font-semibold">सच के साथ, हर पल</span>
               </div>
             </Link>
 
@@ -110,19 +110,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         )}
       </header>
 
-      {/* Breaking News Bar */}
-      <div className="bg-red-600 text-white py-2 overflow-hidden">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center">
-            <span className="bg-white text-red-600 px-3 py-1 text-xs font-bold mr-4 shrink-0">BREAKING</span>
-            <div className="flex-1 overflow-hidden">
-              <div className="animate-marquee whitespace-nowrap inline-block">
-                <span className="text-sm">🚨 Breaking: Major developments in technology sector - Stay tuned for updates</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+
 
       {/* Main Content */}
       <main className="flex-1">
@@ -130,48 +118,48 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12">
+      <footer className="bg-white border-t border-gray-200 text-gray-900 py-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div className="md:col-span-2">
               <div className="flex items-center gap-3 mb-4">
                 <img 
-                  src="/logo.png" 
+                  src="/logo.jpeg" 
                   alt="Khabre Aaj Tak" 
-                  className="w-8 h-8 object-contain rounded-full" 
+                  className="w-12 h-12 md:w-14 md:h-14 object-contain rounded-full border border-gray-100 shadow-sm" 
                 />
-                <span className="text-xl font-bold">Khabre Aaj Tak</span>
+                <span className="text-xl font-bold text-blue-600">खबरें आज तक</span>
               </div>
-              <p className="text-gray-400 text-sm leading-6">
+              <p className="text-gray-500 text-sm leading-6">
                 Delivering trusted news and updates from around the world. 
                 Stay informed with our comprehensive coverage of current events.
               </p>
             </div>
             
             <div>
-              <h3 className="font-semibold mb-4">Quick Links</h3>
-              <ul className="space-y-2 text-sm text-gray-400">
-                <li><Link href="/" className="hover:text-white transition-colors">Home</Link></li>
-                <li><Link href="/about" className="hover:text-white transition-colors">About Us</Link></li>
-                <li><Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
+              <h3 className="font-semibold text-gray-900 mb-4">Quick Links</h3>
+              <ul className="space-y-2 text-sm text-gray-500">
+                <li><Link href="/" className="hover:text-blue-600 transition-colors">Home</Link></li>
+                <li><Link href="/about" className="hover:text-blue-600 transition-colors">About Us</Link></li>
+                <li><Link href="/privacy" className="hover:text-blue-600 transition-colors">Privacy Policy</Link></li>
               </ul>
             </div>
             
             <div>
-              <h3 className="font-semibold mb-4">Contact</h3>
-              <ul className="space-y-2 text-sm text-gray-400">
-                <li>contact@khabreaajtak.co.in</li>
-                <li>+91 (555) 123-NEWS</li>
+              <h3 className="font-semibold text-gray-900 mb-4">Contact</h3>
+              <ul className="space-y-2 text-sm text-gray-500">
+                <li>khabreaajtak1@gmail.com</li>
+                <li>+91 (022) 497617</li>
                 <li>Press inquiries</li>
               </ul>
             </div>
           </div>
           
-          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-sm text-gray-400 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="border-t border-gray-100 mt-8 pt-8 text-center text-sm text-gray-500 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div>
-              © {new Date().getFullYear()} Khabre Aaj Tak. All rights reserved.
+              © {new Date().getFullYear()} खबरें आज तक. All rights reserved.
             </div>
-            <div className="text-gray-500 text-xs">
+            <div className="text-gray-400 text-xs">
               Powered by <span className="text-red-500 font-semibold">SusaLabs</span>
             </div>
           </div>

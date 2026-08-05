@@ -29,4 +29,15 @@ const upload = multer({
   limits: { fileSize: 100 * 1024 * 1024 }, // ✅ 100MB Upload Limit
 });
 
-module.exports = { upload, uploadsDir };
+// ✅ Allow only images for ads
+const uploadImage = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    const isImage = file.mimetype.startsWith('image/');
+    if (isImage) return cb(null, true);
+    cb(new Error('Only image files are allowed'));
+  },
+  limits: { fileSize: 10 * 1024 * 1024 }, // ✅ 10MB limit for ad banners
+});
+
+module.exports = { upload, uploadImage, uploadsDir };
