@@ -28,14 +28,11 @@ exports.uploadAd = async (req, res) => {
 
     // Check if Cloudinary credentials are set
     if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
-      console.log('[adController] Uploading image to Cloudinary...');
       const { uploadToCloudinary } = require('../services/cloudinaryClient');
       const cloudResult = await uploadToCloudinary(req.file.path, 'khabre-ads');
       imageUrl = cloudResult.secure_url;
       publicId = cloudResult.public_id;
-      console.log('[adController] Cloudinary upload successful:', imageUrl);
     } else {
-      console.log('[adController] Cloudinary credentials missing. Falling back to Google Drive...');
       const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
       if (!folderId) {
         safeUnlink(req.file.path);
@@ -47,7 +44,6 @@ exports.uploadAd = async (req, res) => {
       const driveResult = await uploadFileStreamToDrive(stream, req.file.originalname, folderId, req.file.mimetype);
       imageUrl = driveResult.publicUrl;
       driveFileId = driveResult.fileId;
-      console.log('[adController] Drive upload successful:', driveResult.fileId);
     }
 
     // Save to Database
@@ -122,7 +118,6 @@ exports.remove = async (req, res) => {
 
     if (ad.publicId) {
       try {
-        console.log(`[adController] Deleting file ${ad.publicId} from Cloudinary...`);
         const { deleteFromCloudinary } = require('../services/cloudinaryClient');
         await deleteFromCloudinary(ad.publicId);
       } catch (cloudErr) {
@@ -130,7 +125,6 @@ exports.remove = async (req, res) => {
       }
     } else if (ad.driveFileId) {
       try {
-        console.log(`[adController] Deleting file ${ad.driveFileId} from Drive...`);
         await deleteFromDrive(ad.driveFileId);
       } catch (driveErr) {
         console.error(`[adController] Drive file deletion failed: ${driveErr.message}`);

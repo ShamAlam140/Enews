@@ -35,7 +35,6 @@ export async function getCityFiles(
   const url = `${API_BASE}/files/by-city/${encodeURIComponent(
     city
   )}/page-images?limit=${limit}&pages=${pages}&w=${w}`;
-  console.log(`[getCityFiles] 🌐 Requesting: ${url}`);
 
   try {
     const res = await fetchWithTimeout(url, {
@@ -44,18 +43,14 @@ export async function getCityFiles(
       signal,
       timeout,
     });
-    console.log(`[getCityFiles] 🟢 Response Status: ${res.status} ${res.statusText}`);
     const json = await res.json();
-    console.log(`[getCityFiles] 📦 Response JSON:`, JSON.stringify(json, null, 2));
 
     if (json && Array.isArray(json.files)) {
-      console.log(`[getCityFiles] ✅ Found ${json.files.length} files.`);
       return json.files as CityItem[];
     }
-    console.warn(`[getCityFiles] ⚠️ Response files is not an array:`, json);
     return [];
   } catch (err: any) {
-    console.error(`[getCityFiles] ❌ Error fetching from ${url}:`, err.message || err);
+    console.error(`[getCityFiles] Error:`, err.message || err);
     throw err;
   }
 }

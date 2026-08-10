@@ -73,7 +73,6 @@ async function deleteFromDrive(fileId) {
         fields: 'id,name,parents,driveId,trashed',
         supportsAllDrives: true,
       });
-      console.log('[drive] delete-probe meta:', meta.data);
 
       // 3) Fallback: hard delete blocked ho to TRASH me bhej do
       try {

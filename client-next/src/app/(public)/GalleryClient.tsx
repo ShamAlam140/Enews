@@ -14,7 +14,85 @@ import { titleCaseCity, formatShortDate } from "@/lib/utils/format";
 import { driveThumbUrl, getLatestByCity } from "@/lib/services/publicFileService";
 import { listActiveAds, type AdRecord } from "@/lib/services/adService";
 
+function getTodayDateString() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getYesterdayDateString() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/** Smart date matcher checking both ISO uploadedAt & filename dates */
+function matchesSelectedDate(item: CityLatest, selectedDate: string): boolean {
+  if (selectedDate === "all") return true;
+
+  // 1. Check item.date (uploadedAt timestamp)
+  if (item.date) {
+    const d = new Date(item.date);
+    if (!isNaN(d.getTime())) {
+      const isoDate = d.toISOString().split("T")[0];
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      const localDate = `${year}-${month}-${day}`;
+      
+      if (isoDate === selectedDate || localDate === selectedDate) {
+        return true;
+      }
+    }
+  }
+
+  // 2. Check item.originalName (e.g. "Mumbai---06-August-2026.pdf" or "Khabre Aaj Tak 6.8.2026.pdf")
+  if (item.originalName) {
+    const name = item.originalName;
+
+    // Pattern A: 6.8.2026 or 06.08.2026 or 10.7.2026
+    const dotMatch = name.match(/(\d{1,2})[\.\-](\d{1,2})[\.\-](\d{4})/);
+    if (dotMatch) {
+      const day = String(parseInt(dotMatch[1], 10)).padStart(2, "0");
+      const month = String(parseInt(dotMatch[2], 10)).padStart(2, "0");
+      const year = dotMatch[3];
+      const parsedDate = `${year}-${month}-${day}`;
+      if (parsedDate === selectedDate) return true;
+    }
+
+    // Pattern B: 06-August-2026 or 06-Aug-2026
+    const monthMap: Record<string, string> = {
+      january: "01", feb: "02", february: "02", mar: "03", march: "03",
+      apr: "04", april: "04", may: "05", june: "06", jun: "06",
+      july: "07", jul: "07", aug: "08", august: "08", sep: "09", september: "09",
+      oct: "10", october: "10", nov: "11", november: "11", dec: "12", december: "12"
+    };
+    const namedMatch = name.match(/(\d{1,2})[\-\_\s]+([a-zA-Z]+)[\-\_\s]+(\d{4})/);
+    if (namedMatch) {
+      const day = String(parseInt(namedMatch[1], 10)).padStart(2, "0");
+      const monthName = namedMatch[2].toLowerCase();
+      const year = namedMatch[3];
+      if (monthMap[monthName]) {
+        const parsedDate = `${year}-${monthMap[monthName]}-${day}`;
+        if (parsedDate === selectedDate) return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 export default function GalleryClient({ initialCities }: { initialCities: CityLatest[] }) {
+  const todayStr = useMemo(() => getTodayDateString(), []);
+  const yesterdayStr = useMemo(() => getYesterdayDateString(), []);
+
+  // 'all' shows all newspapers by default; users can select specific dates
+  const [selectedDate, setSelectedDate] = useState<string>("all");
   const [cities, setCities] = useState<CityLatest[]>(initialCities);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -58,16 +136,83 @@ export default function GalleryClient({ initialCities }: { initialCities: CityLa
 
   const loading = status === "loading";
 
+  // Filter cities client-side based on selected date
+  const filteredCities = useMemo(() => {
+    return cities.filter((item) => matchesSelectedDate(item, selectedDate));
+  }, [cities, selectedDate]);
+
+  const isToday = selectedDate === todayStr;
+  const isYesterday = selectedDate === yesterdayStr;
+  const isAll = selectedDate === "all";
+
   return (
     <div className="mx-auto max-w-screen-2xl px-3 md:px-6 py-6 md:py-10 text-gray-900">
-      {/* Header */}
-      <div className="mb-6 md:mb-8 flex items-end justify-between flex-wrap gap-3">
-        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight leading-none">
-          <span className="bg-red-600 text-white px-2 py-1 rounded">ताज़ा खबरें</span>
-          <span className="ml-2 text-gray-900">Latest News</span>
-        </h1>
-        <div className="text-xs md:text-sm text-gray-500">
-          {new Date().toLocaleDateString()}
+      {/* Header & Date Filter Bar */}
+      <div className="mb-6 md:mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-gray-200 pb-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight leading-none flex items-center gap-2">
+            <span className="bg-red-600 text-white px-2.5 py-1 rounded-md shadow-sm">
+              {isAll ? "ताज़ा खबरें" : isToday ? "आज की खबरें" : isYesterday ? "कल की खबरें" : "पुराने अंक"}
+            </span>
+            <span className="text-gray-900">
+              {isAll ? "Latest News" : isToday ? "Today's News" : "Archived News"}
+            </span>
+          </h1>
+          <p className="text-xs text-gray-500 mt-1">
+            {isAll
+              ? `कुल उपलब्ध अंक: ${filteredCities.length}`
+              : `तारीख: ${new Date(selectedDate + "T00:00:00").toLocaleDateString('hi-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`}
+          </p>
+        </div>
+
+        {/* Date Selector Tools */}
+        <div className="flex flex-wrap items-center gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200 w-full md:w-auto">
+          <button
+            onClick={() => setSelectedDate("all")}
+            className={`px-3 py-1.5 text-xs md:text-sm font-semibold rounded-lg transition-all ${
+              isAll
+                ? "bg-red-600 text-white shadow-sm"
+                : "text-gray-700 hover:bg-white hover:shadow-xs"
+            }`}
+          >
+            सभी अंक (All News)
+          </button>
+
+          <button
+            onClick={() => setSelectedDate(todayStr)}
+            className={`px-3 py-1.5 text-xs md:text-sm font-semibold rounded-lg transition-all ${
+              isToday
+                ? "bg-red-600 text-white shadow-sm"
+                : "text-gray-700 hover:bg-white hover:shadow-xs"
+            }`}
+          >
+            आज (Today)
+          </button>
+          
+          <button
+            onClick={() => setSelectedDate(yesterdayStr)}
+            className={`px-3 py-1.5 text-xs md:text-sm font-semibold rounded-lg transition-all ${
+              isYesterday
+                ? "bg-red-600 text-white shadow-sm"
+                : "text-gray-700 hover:bg-white hover:shadow-xs"
+            }`}
+          >
+            कल (Yesterday)
+          </button>
+
+          {/* Calendar Date Picker */}
+          <div className="flex items-center gap-1 bg-white px-2.5 py-1 rounded-lg border border-gray-300 shadow-xs hover:border-red-500 transition">
+            <span className="text-xs text-gray-500 font-medium whitespace-nowrap">तारीख चुनें:</span>
+            <input
+              type="date"
+              value={selectedDate === "all" ? "" : selectedDate}
+              max={todayStr}
+              onChange={(e) => {
+                if (e.target.value) setSelectedDate(e.target.value);
+              }}
+              className="text-xs font-semibold text-gray-800 bg-transparent focus:outline-none cursor-pointer"
+            />
+          </div>
         </div>
       </div>
 
@@ -128,15 +273,28 @@ export default function GalleryClient({ initialCities }: { initialCities: CityLa
                 </div>
               ))}
             </div>
-          ) : cities.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-gray-300 p-10 text-center">
-              <div className="text-4xl mb-2">📰</div>
-              <p className="text-gray-700 font-medium">No cities yet</p>
-              <p className="text-gray-500 text-sm">Upload a PDF to get started.</p>
+          ) : filteredCities.length === 0 ? (
+            <div className="rounded-2xl border-2 border-dashed border-gray-300 bg-slate-50/50 p-10 text-center my-4">
+              <div className="text-5xl mb-3">📰</div>
+              <h3 className="text-lg font-bold text-gray-800 mb-1">
+                इस तारीख ({new Date(selectedDate + "T00:00:00").toLocaleDateString('hi-IN')}) की कोई खबर उपलब्ध नहीं है
+              </h3>
+              <p className="text-gray-500 text-sm max-w-md mx-auto mb-6">
+                चुनी गई तारीख के लिए कोई ई-पेपर नहीं मिला। आप सभी उपलब्ध अंक देख सकते हैं।
+              </p>
+              
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <button
+                  onClick={() => setSelectedDate("all")}
+                  className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-medium text-sm transition shadow-sm"
+                >
+                  <span>सभी अंक (All News) देखें</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid gap-6 grid-cols-1 md:grid-cols-2">
-              {cities.map((item) => {
+              {filteredCities.map((item) => {
                 const cityKey = (item.city || "").toLowerCase();
                 const prettyCity = titleCaseCity(item.city);
                 const imgSrc = getImgSrc(item);
@@ -206,7 +364,6 @@ export default function GalleryClient({ initialCities }: { initialCities: CityLa
               })}
             </div>
           )}
-
           {/* Bottom Horizontal Ad - Mobile/Tablet Only */}
           <div className="block lg:hidden">
             {rightAd ? (

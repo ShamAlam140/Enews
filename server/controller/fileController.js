@@ -57,7 +57,7 @@ function safeUnlink(p) {
 }
 
 function logObj(label, obj) {
-  console.log(label, util.inspect(obj, { depth: 3, colors: true, breakLength: 120 }));
+  // disabled for performance
 }
 
 async function getPdfPageCount(filePath) {
@@ -69,7 +69,6 @@ async function getPdfPageCount(filePath) {
     doc.destroy(); // Free memory
     return numPages;
   } catch (err) {
-    console.error('[getPdfPageCount] Error:', err.message);
     return 0;
   }
 }
@@ -97,17 +96,8 @@ function serialize(file) {
 exports.uploadSingle = async (req, res) => {
   try {
     if (!req.file) {
-      console.error('[uploadSingle] ❌ No file received. body=', req.body);
       return res.status(400).json({ error: 'No file uploaded' });
     }
-
-    logObj('[uploadSingle] ✅ Incoming file:', {
-      originalname: req.file.originalname,
-      mimetype: req.file.mimetype,
-      size: req.file.size,
-      path: req.file.path,
-    });
-    logObj('[uploadSingle] Body:', req.body);
 
     const pages = await getPdfPageCount(req.file.path);
 
@@ -118,9 +108,7 @@ exports.uploadSingle = async (req, res) => {
       throw new Error('GOOGLE_DRIVE_FOLDER_ID environment variable is missing');
     }
 
-    console.log(`[uploadSingle] 🚀 Uploading to Drive folder: ${folderId}`);
     const driveResult = await uploadPdfStreamToDrive(stream, req.file.originalname, folderId);
-    console.log('[uploadSingle] ✅ Drive upload successful:', driveResult);
 
     // ✅ Save to database with Drive details
     const f = await File.create({
@@ -143,26 +131,14 @@ exports.uploadSingle = async (req, res) => {
       isActive: true,
     });
 
-    logObj('[uploadSingle] 🟢 Saved DB doc:', f);
-
     // Cleanup temp uploaded file from uploads directory
     safeUnlink(req.file.path);
 
     return res.status(201).json({ message: 'Uploaded', file: serialize(f) });
   } catch (err) {
-    const details = {
-      name: err?.name,
-      message: err?.message,
-      stack: err?.stack,
-      original: err,
-    };
-    console.error('[uploadSingle] 🔴 FAILED:', util.inspect(details, { depth: 3, colors: true }));
-    
-    // Cleanup uploaded file on error
     if (req.file && req.file.path && fs.existsSync(req.file.path)) {
       safeUnlink(req.file.path);
     }
-    
     return res
       .status(500)
       .json({ error: process.env.NODE_ENV === 'production' ? 'Server error' : err?.message || 'Server error' });
@@ -201,11 +177,9 @@ exports.remove = async (req, res) => {
     const driveFileId = file.driveFileId || file.publicId;
     if (driveFileId) {
       try {
-        console.log(`[remove] 🗑️ Deleting from Drive: ${driveFileId}`);
         await deleteFromDrive(driveFileId);
-        console.log(`[remove] ✅ Deleted from Drive: ${driveFileId}`);
       } catch (driveErr) {
-        console.error(`[remove] ❌ Failed to delete from Drive: ${driveErr.message}`);
+        console.error(`[remove] Failed to delete from Drive: ${driveErr.message}`);
       }
     }
 
@@ -213,10 +187,8 @@ exports.remove = async (req, res) => {
     if (file.filename) {
       const localFilesDir = path.join(__dirname, '..', 'file');
       const filePath = path.join(localFilesDir, file.filename);
-      
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
-        console.log(`[remove] ✅ Deleted local file: ${filePath}`);
       }
     }
     
@@ -225,7 +197,6 @@ exports.remove = async (req, res) => {
       const uploadsPath = path.join(uploadsDir, file.filename);
       if (fs.existsSync(uploadsPath)) {
         fs.unlinkSync(uploadsPath);
-        console.log(`[remove] ✅ Deleted upload file: ${uploadsPath}`);
       }
     }
 
@@ -284,10 +255,9 @@ exports.getLatestByCity = async (req, res) => {
               isActive: true,
               thumbUrl: `/files/${filename}`, // Local file URL
             });
-            console.log(`[getLatestByCity] ✅ Added local file to DB: ${filename}`);
           }
         } catch (syncErr) {
-          console.error(`[getLatestByCity] ⚠️ Failed to sync local file ${filename}:`, syncErr.message);
+          console.error(`[getLatestByCity] Failed to sync local file ${filename}:`, syncErr.message);
         }
       }
     }
@@ -417,10 +387,9 @@ exports.listByCityPageImages = async (req, res) => {
           // ✅ Update DB so we don't have to do this again
           if (actualPages > 0) {
             await File.findByIdAndUpdate(f._id, { pageCount: actualPages });
-            console.log(`[listByCityPageImages] ✅ Updated pageCount for ${f.originalName}: ${actualPages}`);
           }
         } catch (err) {
-          console.error(`[listByCityPageImages] ⚠️ Could not get page count for ${f.originalName}:`, err.message);
+          console.error(`[listByCityPageImages] Could not get page count for ${f.originalName}:`, err.message);
           actualPages = 1; // Fallback to at least 1 page
         }
       }
@@ -536,10 +505,8 @@ async function ensurePdfCached(driveFileId, cacheDir) {
     // Download to a unique temp file first, then rename (atomic)
     const tmpPath = path.join(cacheDir, `${driveFileId}_dl_${Date.now()}.tmp`);
     try {
-      console.log(`[renderPdfPage] ⬇️  Downloading PDF ${driveFileId} from Drive...`);
       await downloadPdfFromDrive(driveFileId, tmpPath);
       fs.renameSync(tmpPath, cachedPdfPath);
-      console.log(`[renderPdfPage] ✅ PDF cached: ${cachedPdfPath}`);
     } catch (err) {
       safeUnlink(tmpPath);
       throw err;
@@ -612,8 +579,6 @@ exports.renderPdfPage = async (req, res) => {
     try {
       // Check again inside the lock in case it was rendered while waiting in queue
       if (!fs.existsSync(cachedImagePath)) {
-        console.log(`[renderPdfPage] 🖼️  Rendering page ${pageNum} for PDF ${fileId} (JPEG, scale 1.8)...`);
-
         // ✅ pdfjs-dist v3.x uses CommonJS require (not ESM import)
         const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
 
@@ -653,7 +618,6 @@ exports.renderPdfPage = async (req, res) => {
         // Save rendered image to cache using JPEG format at 80% quality
         const imgBuffer = canvasObj.toBuffer('image/jpeg', { quality: 0.8 });
         fs.writeFileSync(cachedImagePath, imgBuffer);
-        console.log(`[renderPdfPage] ✅ Rendered page ${pageNum} successfully (${(imgBuffer.length / 1024).toFixed(0)} KB).`);
 
         // Cleanup: destroy the canvas
         canvasFactory.destroy({ canvas: canvasObj, context });
@@ -664,7 +628,7 @@ exports.renderPdfPage = async (req, res) => {
 
     return res.sendFile(cachedImagePath);
   } catch (err) {
-    console.error('[renderPdfPage] ❌ Error rendering PDF page:', err);
+    console.error('[renderPdfPage] Error rendering PDF page:', err.message);
     const status = err.statusCode || 500;
     return res.status(status).json({ error: err.message || 'Failed to render PDF page' });
   }
