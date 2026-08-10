@@ -26,7 +26,6 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
 
   const [files, setFiles] = useState<CityItem[]>(initialFiles);
   const [showAllFiles, setShowAllFiles] = useState<boolean>(false);
-  const [showOnlySharedPage, setShowOnlySharedPage] = useState<boolean>(Boolean(targetPageNum && targetPageNum > 0));
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -115,7 +114,6 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
 
   const loading = status === "loading";
   const isFilteredSingleFile = Boolean(fileIdParam && !showAllFiles && displayFiles.length < files.length);
-  const isSinglePageMode = Boolean(targetPageNum && targetPageNum > 0 && showOnlySharedPage && !showAllFiles);
 
   return (
     <div className="mx-auto max-w-screen-xl px-3 md:px-6 py-6 md:py-10 text-gray-900">
@@ -148,11 +146,10 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
           </div>
 
           <div className="flex items-center gap-3">
-            {(isFilteredSingleFile || isSinglePageMode) && (
+            {isFilteredSingleFile && (
               <button
                 onClick={() => {
                   setShowAllFiles(true);
-                  setShowOnlySharedPage(false);
                 }}
                 className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition shadow-xs"
               >
@@ -165,33 +162,6 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
           </div>
         </div>
       </div>
-
-      {/* Shared Specific Page Alert Banner */}
-      {isSinglePageMode && targetPageNum && (
-        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900 flex flex-wrap items-center justify-between gap-3 shadow-sm">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">📄</span>
-            <div>
-              <p className="font-bold text-red-950 text-base">
-                आप {title} e-Paper का <span className="underline font-black">केवल पेज नंबर {targetPageNum}</span> देख रहे हैं
-              </p>
-              <p className="text-xs text-red-800 mt-0.5">
-                पूरा अख़बार पढ़ने के लिए &quot;पूरा पेपर देखें&quot; बटन दबाएं।
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => {
-              setShowOnlySharedPage(false);
-              setShowAllFiles(true);
-            }}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition shadow-md flex items-center gap-1.5"
-          >
-            <span>📖</span>
-            <span>पूरा अख़बार देखें (View Full Paper)</span>
-          </button>
-        </div>
-      )}
 
       {/* Error */}
       {error && (
@@ -226,14 +196,7 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
             Math.ceil(allImages.length / PAGE_SIZE)
           );
 
-          // If user arrived via single page share URL and hasn't unlocked full paper, show ONLY shared target page!
-          let slice = allImages;
-          if (isSinglePageMode && targetPageNum) {
-            const single = allImages.filter((p) => p.page === targetPageNum);
-            slice = single.length > 0 ? single : allImages.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
-          } else {
-            slice = allImages.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
-          }
+          const slice = allImages.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
           return (
             <article key={f.id} id={f.id} className="rounded-2xl border bg-white shadow-sm overflow-hidden scroll-mt-24">
@@ -261,7 +224,7 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
                   {/* WhatsApp Share Entire Document */}
                   <a
                     href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
-                      `خبرें आज तक - ${f.originalName ? f.originalName.replace(/\.[^/.]+$/, "") : title} e-Paper पढ़ने के लिए क्लिक करें: ${
+                      `📰 *खबरें आज तक (Khabre Aaj Tak)*\n📍 *${f.originalName ? f.originalName.replace(/\.[^/.]+$/, "") : title} e-Paper*\n\nपढ़ने के लिए नीचे दिए गए लिंक पर क्लिक करें:\n${
                         typeof window !== "undefined"
                           ? `${window.location.origin}/city/${city}?fileId=${f.id}`
                           : ""
@@ -350,7 +313,7 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
                           {/* WhatsApp Share Button for THIS Specific Page */}
                           <a
                             href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
-                              `خبرें आज तक - ${f.originalName ? f.originalName.replace(/\.[^/.]+$/, "") : title} (Page ${p.page}) e-Paper पढ़ने के लिए क्लिक करें: ${
+                              `📰 *खबरें आज तक (Khabre Aaj Tak)*\n📍 *${title} e-Paper — Page ${p.page}*\n\nपढ़ने के लिए नीचे दिए गए लिंक पर क्लिक करें:\n${
                                 typeof window !== "undefined"
                                   ? `${window.location.origin}/city/${city}?fileId=${f.id}&page=${p.page}`
                                   : ""
@@ -399,49 +362,28 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
                 })}
               </div>
 
-              {/* Single page notice & Unlock button if viewing shared single page */}
-              {isSinglePageMode && (
-                <div className="p-4 bg-slate-50 border-t text-center">
-                  <p className="text-sm font-semibold text-gray-700 mb-2">
-                    आप इस e-Paper का केवल shared पन्ना देख रहे हैं।
-                  </p>
-                  <button
-                    onClick={() => {
-                      setShowOnlySharedPage(false);
-                      setShowAllFiles(true);
-                    }}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow-md transition transform hover:scale-105 active:scale-95"
-                  >
-                    <span>📖</span>
-                    <span>इस अंक के सभी पन्ने देखें (View All Pages)</span>
-                  </button>
-                </div>
-              )}
-
               {/* Pagination */}
-              {!isSinglePageMode && (
-                <div className="px-4 pb-4 pt-2 border-t flex justify-between items-center text-xs text-gray-700">
-                  <button
-                    disabled={current <= 1}
-                    onClick={() => setFilePage(f.id, current - 1)}
-                    className="px-3 py-1.5 border rounded disabled:opacity-40 hover:bg-gray-50 font-medium transition"
-                  >
-                    ← Prev
-                  </button>
+              <div className="px-4 pb-4 pt-2 border-t flex justify-between items-center text-xs text-gray-700">
+                <button
+                  disabled={current <= 1}
+                  onClick={() => setFilePage(f.id, current - 1)}
+                  className="px-3 py-1.5 border rounded disabled:opacity-40 hover:bg-gray-50 font-medium transition"
+                >
+                  ← Prev
+                </button>
 
-                  <span className="font-semibold">
-                    Page {current} / {total}
-                  </span>
+                <span className="font-semibold">
+                  Page {current} / {total}
+                </span>
 
-                  <button
-                    disabled={current >= total}
-                    onClick={() => setFilePage(f.id, current + 1)}
-                    className="px-3 py-1.5 border rounded disabled:opacity-40 hover:bg-gray-50 font-medium transition"
-                  >
-                    Next →
-                  </button>
-                </div>
-              )}
+                <button
+                  disabled={current >= total}
+                  onClick={() => setFilePage(f.id, current + 1)}
+                  className="px-3 py-1.5 border rounded disabled:opacity-40 hover:bg-gray-50 font-medium transition"
+                >
+                  Next →
+                </button>
+              </div>
             </article>
           );
         })}
