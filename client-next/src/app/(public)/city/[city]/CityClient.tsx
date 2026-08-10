@@ -146,7 +146,7 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
           </div>
 
           <div className="flex items-center gap-3">
-            {isFilteredSingleFile && (
+            {(isFilteredSingleFile || (targetPageNum && !showAllFiles)) && (
               <button
                 onClick={() => {
                   setShowAllFiles(true);
@@ -196,7 +196,13 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
             Math.ceil(allImages.length / PAGE_SIZE)
           );
 
-          const slice = allImages.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+          // If targetPageNum is in URL, display ONLY that specific shared page cleanly
+          const isSinglePage = Boolean(targetPageNum && targetPageNum > 0 && !showAllFiles);
+          const slice = isSinglePage
+            ? (allImages.filter((p) => p.page === targetPageNum).length > 0
+                ? allImages.filter((p) => p.page === targetPageNum)
+                : allImages.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE))
+            : allImages.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
           return (
             <article key={f.id} id={f.id} className="rounded-2xl border bg-white shadow-sm overflow-hidden scroll-mt-24">
