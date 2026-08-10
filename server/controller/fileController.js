@@ -537,8 +537,9 @@ exports.renderPdfPage = async (req, res) => {
 
     const cachedImagePath = path.join(cacheDir, `${fileId}_page_${pageNum}.jpg`);
 
-    // If cached image exists, serve it directly
+    // If cached image exists, serve it directly with browser & CDN caching
     if (fs.existsSync(cachedImagePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       return res.sendFile(cachedImagePath);
     }
 
@@ -626,6 +627,7 @@ exports.renderPdfPage = async (req, res) => {
       renderSemaphore.release();
     }
 
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     return res.sendFile(cachedImagePath);
   } catch (err) {
     console.error('[renderPdfPage] Error rendering PDF page:', err.message);

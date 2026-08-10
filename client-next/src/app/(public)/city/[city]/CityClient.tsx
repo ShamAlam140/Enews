@@ -176,7 +176,7 @@ export default function CityClient({ city, initialFiles }: { city: string; initi
                 आप {title} e-Paper का <span className="underline font-black">केवल पेज नंबर {targetPageNum}</span> देख रहे हैं
               </p>
               <p className="text-xs text-red-800 mt-0.5">
-                पूरा अख़बार पढ़ने के लिए "पूरा पेपर देखें" बटन दबाएं।
+                पूरा अख़बार पढ़ने के लिए &quot;पूरा पेपर देखें&quot; बटन दबाएं।
               </p>
             </div>
           </div>

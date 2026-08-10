@@ -47,5 +47,7 @@ fileSchema.index({ uploadedBy: 1 });
 fileSchema.index({ uploadedAt: -1 });
 fileSchema.index({ mimetype: 1 });
 fileSchema.index({ city: 1 });
+fileSchema.index({ city: 1, isActive: 1, uploadedAt: -1 });
+fileSchema.index({ driveFileId: 1, publicId: 1 });
 
 module.exports = mongoose.model('File', fileSchema);
