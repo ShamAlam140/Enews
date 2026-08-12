@@ -149,7 +149,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
               <h3 className="font-semibold text-gray-900 mb-4">Contact</h3>
               <ul className="space-y-2 text-sm text-gray-500">
                 <li>khabreaajtak1@gmail.com</li>
-                <li>+91 9691860632</li>
+                <li>+91 (022) 49764717</li>
                 <li>Press inquiries</li>
               </ul>
             </div>
