@@ -91,8 +91,8 @@ export default function GalleryClient({ initialCities }: { initialCities: CityLa
   const todayStr = useMemo(() => getTodayDateString(), []);
   const yesterdayStr = useMemo(() => getYesterdayDateString(), []);
 
-  // 'all' shows all newspapers by default; users can select specific dates
-  const [selectedDate, setSelectedDate] = useState<string>("all");
+  // Today is selected by default; users can select yesterday or specific date
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [cities, setCities] = useState<CityLatest[]>(initialCities);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -143,7 +143,6 @@ export default function GalleryClient({ initialCities }: { initialCities: CityLa
 
   const isToday = selectedDate === todayStr;
   const isYesterday = selectedDate === yesterdayStr;
-  const isAll = selectedDate === "all";
 
   return (
     <div className="mx-auto max-w-screen-2xl px-3 md:px-6 py-6 md:py-10 text-gray-900">
@@ -152,32 +151,19 @@ export default function GalleryClient({ initialCities }: { initialCities: CityLa
         <div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight leading-none flex items-center gap-2">
             <span className="bg-red-600 text-white px-2.5 py-1 rounded-md shadow-sm">
-              {isAll ? "ताज़ा खबरें" : isToday ? "आज की खबरें" : isYesterday ? "कल की खबरें" : "पुराने अंक"}
+              {isToday ? "आज की खबरें" : isYesterday ? "कल की खबरें" : "पुराने अंक"}
             </span>
             <span className="text-gray-900">
-              {isAll ? "Latest News" : isToday ? "Today's News" : "Archived News"}
+              {isToday ? "Today's News" : "Archived News"}
             </span>
           </h1>
           <p className="text-xs text-gray-500 mt-1">
-            {isAll
-              ? `कुल उपलब्ध अंक: ${filteredCities.length}`
-              : `तारीख: ${new Date(selectedDate + "T00:00:00").toLocaleDateString('hi-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`}
+            {`तारीख: ${new Date(selectedDate + "T00:00:00").toLocaleDateString('hi-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`}
           </p>
         </div>
 
         {/* Date Selector Tools */}
         <div className="flex flex-wrap items-center gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200 w-full md:w-auto">
-          <button
-            onClick={() => setSelectedDate("all")}
-            className={`px-3 py-1.5 text-xs md:text-sm font-semibold rounded-lg transition-all ${
-              isAll
-                ? "bg-red-600 text-white shadow-sm"
-                : "text-gray-700 hover:bg-white hover:shadow-xs"
-            }`}
-          >
-            सभी अंक (All News)
-          </button>
-
           <button
             onClick={() => setSelectedDate(todayStr)}
             className={`px-3 py-1.5 text-xs md:text-sm font-semibold rounded-lg transition-all ${
@@ -205,7 +191,7 @@ export default function GalleryClient({ initialCities }: { initialCities: CityLa
             <span className="text-xs text-gray-500 font-medium whitespace-nowrap">तारीख चुनें:</span>
             <input
               type="date"
-              value={selectedDate === "all" ? "" : selectedDate}
+              value={selectedDate}
               max={todayStr}
               onChange={(e) => {
                 if (e.target.value) setSelectedDate(e.target.value);
@@ -280,15 +266,15 @@ export default function GalleryClient({ initialCities }: { initialCities: CityLa
                 इस तारीख ({new Date(selectedDate + "T00:00:00").toLocaleDateString('hi-IN')}) की कोई खबर उपलब्ध नहीं है
               </h3>
               <p className="text-gray-500 text-sm max-w-md mx-auto mb-6">
-                चुनी गई तारीख के लिए कोई ई-पेपर नहीं मिला। आप सभी उपलब्ध अंक देख सकते हैं।
+                चुनी गई तारीख के लिए कोई ई-पेपर नहीं मिला। आप कल की खबरें देख सकते हैं।
               </p>
               
               <div className="flex flex-wrap items-center justify-center gap-3">
                 <button
-                  onClick={() => setSelectedDate("all")}
+                  onClick={() => setSelectedDate(yesterdayStr)}
                   className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-medium text-sm transition shadow-sm"
                 >
-                  <span>सभी अंक (All News) देखें</span>
+                  <span>कल (Yesterday) की खबरें देखें</span>
                 </button>
               </div>
             </div>
